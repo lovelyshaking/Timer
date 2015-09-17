@@ -1,5 +1,6 @@
 package gx.timer;
 
+import android.content.Intent;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.os.Handler;
@@ -25,53 +26,7 @@ public class MainActivity extends ActionBarActivity {
     private Button btn_stop;
     private String interval = "";
     private String totaltime = "";
-    private Timer timer ;//= new Timer();
-    private Timer timer_allTime; //;= new Timer();
-    private Timer timer_allTime_helper ;//= new Timer();
 
-    private TimerTask task = null;
-    private TimerTask task_alltime = null;
-    private TimerTask task_alltime_helper = null;
-
-    int rid[] = new int[]{R.raw.half_time,R.raw.time_reached,R.raw.time_end};
-    SoundPool sndPool_reach;
-
-
-    Handler handler= new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            // TODO Auto-generated method stub
-            Log.d("Handler","Time reached");
-            sndPool_reach.play(1,1, 1, 0, 0, 1);
-            super.handleMessage(msg);
-        }
-    };;
-    Handler handler_alltime= new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            // TODO Auto-generated method stub
-            Log.d("Handler_alltime","Time reached");
-            sndPool_reach.play(2, 1, 1, 0, 0, 1);
-            timer_allTime.cancel();
-            task_alltime.cancel();
-            timer_allTime_helper.schedule(task_alltime_helper,(long)( Double.parseDouble(totaltime)* 60 * 1000 / 2));
-            super.handleMessage(msg);
-        }
-    };;
-    Handler handler_alltime_helper= new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            // TODO Auto-generated method stub
-            Log.d("Handler_endtime","Time reached");
-//            Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-//            Ringtone r = RingtoneManager.getRingtone(getApplicationContext(), notification);
-//            r.play();
-            sndPool_reach.play(3, 1, 1, 0, 0, 1);
-            timer_allTime_helper.cancel();
-            task_alltime_helper.cancel();
-            super.handleMessage(msg);
-        }
-    };;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -82,87 +37,58 @@ public class MainActivity extends ActionBarActivity {
         btn_begin = (Button)findViewById(R.id.btn_begin);
         btn_stop = (Button)findViewById(R.id.btn_stop);
 
-        //sndPool_half = new SoundPool(1, AudioManager.STREAM_SYSTEM,5);
-        sndPool_reach = new SoundPool(3, AudioManager.STREAM_SYSTEM,5);
-       // getSndPool_end = new SoundPool(1, AudioManager.STREAM_SYSTEM,5);
-
-
 
         btn_begin.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Toast.makeText(MainActivity.this,"Time begin!",Toast.LENGTH_LONG).show();
+                //Toast.makeText(MainActivity.this,"Time begin!",Toast.LENGTH_LONG).show();
                 interval = editText.getText().toString();
                 totaltime = editText2.getText().toString();
-
-                sndPool_reach.load(MainActivity.this, rid[1], 1);  //reach
-                sndPool_reach.load(MainActivity.this, rid[0], 1);  //half time
-                sndPool_reach.load(MainActivity.this, rid[2], 1);  //end
 
                 if(interval.equals("") && totaltime.equals("")){
                     Toast.makeText(MainActivity.this,"wrong interval!",Toast.LENGTH_LONG).show();
                 }
                 if (!interval.equals("") && totaltime.equals("")) {
-                    double i_t = Double.parseDouble(interval);
-                    Log.d("i_t", i_t + "");
-                    timer = new Timer();
-                    task = new TimerTask() {
-                        @Override
-                        public void run() {
-                            // TODO Auto-generated method stub
-                            Message message = new Message();
-                            message.what = 1;
-                            handler.sendMessage(message);
-                        }
-                    };
-                    timer.schedule(task, (long) (i_t * 60 * 1000), (long) (i_t * 60 * 1000));
-                    //sndPool_reach.load(MainActivity.this, rid[1], 1);
+                    Intent intent = new Intent(MainActivity.this,TimingService.class);
+                    intent.setAction(MainActivity.class.getName());;
+                    int type = 1;
+                    intent.putExtra("type",type);
+                    intent.putExtra("interval",interval);
+                    Log.d("MainActivity","StartService type 1");
+                    startService(intent);
                 }
                 if(interval.equals("") && !totaltime.equals("")){
-                    double t_t =Double.parseDouble(totaltime);
-                    Log.d("t_t", t_t + "");
-                    timer_allTime = new Timer();
-                    timer_allTime_helper = new Timer();
-                    task_alltime = new TimerTask() {
-                        @Override
-                        public void run() {
-                            Message message = new Message();
-                            message.what = 1;
-                            handler_alltime.sendMessage(message);
-                        }
-                    };
-                    task_alltime_helper = new TimerTask() {
-                        @Override
-                        public void run() {
-                            Message message = new Message();
-                            message.what = 1;
-                            handler_alltime_helper.sendMessage(message);
-                        }
-                    };
-                    timer_allTime.schedule(task_alltime,(long)(t_t * 60 * 1000 / 2));
-
+                    Intent intent = new Intent(MainActivity.this,TimingService.class);
+                    int type = 2;
+                    intent.putExtra("type",type);
+                    intent.putExtra("totaltime",totaltime);
+                    Log.d("MainActivity", "StartService type2");
+                    startService(intent);
                 }
-                if(!interval.equals("") && ! totaltime.equals("")){
-
+                if(!interval.equals("") && !totaltime.equals("")){
+                    if(Double.parseDouble(interval)>Double.parseDouble(totaltime)){
+                        Toast.makeText(MainActivity.this,"wrong time parameter",Toast.LENGTH_SHORT).show();
+                        editText.setText("");
+                        editText2.setText("");
+                    }
+                    else {
+                        Intent intent = new Intent(MainActivity.this, TimingService.class);
+                        int type = 3;
+                        intent.putExtra("type", type);
+                        intent.putExtra("totaltime", totaltime);
+                        intent.putExtra("interval", interval);
+                        Log.d("MainActivity", "StartService type3");
+                        startService(intent);
+                    }
                 }
             }
         });
         btn_stop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(timer != null) {
-                    timer.cancel();
-                }
-                if(task != null){
-                task.cancel();}
-                if(task_alltime != null){
-                    task_alltime.cancel();
-                }
-                if(task_alltime_helper !=null){
-                    task_alltime_helper.cancel();
-                }
                 editText.setText("");
                 editText2.setText("");
+                stopService(new Intent(MainActivity.this,TimingService.class));
             }
         });
 
