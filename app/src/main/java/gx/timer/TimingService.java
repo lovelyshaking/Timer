@@ -1,75 +1,71 @@
 package gx.timer;
 
+import android.app.AlarmManager;
+import android.app.Notification;
+import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.SoundPool;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Message;
 import android.util.Log;
 import android.widget.Toast;
 
-import java.util.Timer;
-import java.util.TimerTask;
 
 public class TimingService extends Service {
     private static String Tag = "TimingService";
-    private Timer timer ;//= new Timer();
-    private Timer timer_allTime; //;= new Timer();
-    private Timer timer_allTime_helper ;//= new Timer();
-
-    private TimerTask task = null;
-    private TimerTask task_alltime = null;
-    private TimerTask task_alltime_helper = null;
 
     int rid[] = new int[]{R.raw.half_time,R.raw.time_reached,R.raw.time_end};
-    SoundPool sndPool_reach;
+    static SoundPool sndPool_reach;
 
 
     private String interval = "";
     private String totaltime = "";
 
-    Handler handler= new Handler() {
+    Intent intent1 = new Intent("LOOPER_TIME");
+    PendingIntent pi;
+
+    Intent intent_all = new Intent("ALL_TIME");
+    PendingIntent pi_all;
+
+    Intent intent_half = new Intent("HALF_TIME");
+    PendingIntent pi_half;
+
+    AlarmManager am ;
+    AlarmManager am_half;
+    AlarmManager am_all;
+
+    private BroadcastReceiver TimerReceiver = new BroadcastReceiver()
+    {
         @Override
-        public void handleMessage(Message msg) {
+        public void onReceive(Context context, Intent intent)
+        {
             // TODO Auto-generated method stub
-            Log.d("Handler", "Time reached");
-            sndPool_reach.play(1,1, 1, 0, 0, 1);
-            super.handleMessage(msg);
+            Log.d(Tag, "broadcast received......................");
+            String action = intent.getAction();
+            if(action.equals("LOOPER_TIME")) {
+                Log.d(Tag, "Looper time reached......................");
+                sndPool_reach.play(1, 1, 1, 0, 0, 1);
+            }
+            else if (action.equals("ALL_TIME")){
+                Log.d(Tag, "All time reached......................");
+                sndPool_reach.play(3,1, 1, 0, 0, 1);
+                stopSelf();
+            }
+            else if (action.equals("HALF_TIME")){
+                Log.d(Tag, "Half time reached......................");
+                sndPool_reach.play(2,1, 1, 0, 0, 1);
+            }
         }
-    };;
-    Handler handler_alltime= new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            // TODO Auto-generated method stub
-            Log.d("Handler_alltime","Time reached");
-            sndPool_reach.play(2, 1, 1, 0, 0, 1);
-            timer_allTime.cancel();
-            task_alltime.cancel();
-            timer_allTime_helper.schedule(task_alltime_helper,(long)( Double.parseDouble(totaltime)* 60 * 1000 / 2));
-            super.handleMessage(msg);
-        }
-    };;
-    Handler handler_alltime_helper= new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            // TODO Auto-generated method stub
-            Log.d("Handler_endtime","Time reached");
-//            Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-//            Ringtone r = RingtoneManager.getRingtone(getApplicationContext(), notification);
-//            r.play();
-            sndPool_reach.play(3, 1, 1, 0, 0, 1);
-            timer_allTime_helper.cancel();
-            task_alltime_helper.cancel();
-            stopSelf();
-            super.handleMessage(msg);
-        }
-    };;
+    };
+
     public TimingService(){
         super();
     }
-   @Override
+    @Override
     public IBinder onBind(Intent intent) {
         // TODO: Return the communication channel to the service.
 
@@ -78,26 +74,35 @@ public class TimingService extends Service {
     }
     @Override
     public void onCreate(){
-        Log.d(Tag,"On create");
+        Log.d(Tag, "On create");
         super.onCreate();
         sndPool_reach = new SoundPool(3, AudioManager.STREAM_SYSTEM,5);
         sndPool_reach.load(this, rid[1], 1);  //reach
         sndPool_reach.load(this, rid[0], 1);  //half time
         sndPool_reach.load(this, rid[2], 1);  //end
+        try {
+            Thread.sleep(1000); // 给予初始化音乐文件足够时间
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        registerBoradcastReceiver();
+         am = (AlarmManager)getSystemService(ALARM_SERVICE);
+         am_half = (AlarmManager)getSystemService(ALARM_SERVICE);
+         am_all = (AlarmManager)getSystemService(ALARM_SERVICE);
+        Log.d(Tag,"registerBoradcastReceiver finish");
+        Notification notification = new Notification(R.drawable.icon, "Timing",System.currentTimeMillis());
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+        notification.setLatestEventInfo(this, "Timing tools", "Tining going", pendingIntent);
+        startForeground(1, notification);
     }
     @Override
     public void onDestroy(){
-        if(timer != null) {
-            timer.cancel();
-        }
-        if(task != null){
-            task.cancel();}
-        if(task_alltime != null){
-            task_alltime.cancel();
-        }
-        if(task_alltime_helper !=null){
-            task_alltime_helper.cancel();
-        }
+        am.cancel(pi);
+        am_all.cancel(pi_all);
+        am_half.cancel(pi_half);
+        unregisterReceiver(TimerReceiver);
+        Log.d(Tag,"Unregister");
         stopSelf();
         super.onDestroy();
     }
@@ -108,7 +113,8 @@ public class TimingService extends Service {
             return START_STICKY;
         }
         String who = intent.getAction();
-        Log.i(Tag, "onStartCommand by: "+ who);
+        Log.i(Tag, "onStartCommand by: " + who);
+
 
         Log.d(Tag,"On create");
         int type = intent.getIntExtra("type",0);
@@ -123,41 +129,21 @@ public class TimingService extends Service {
                 Log.d(Tag+"  recevice type",type+"");
                 double i_t = Double.parseDouble(interval);
                 Log.d("i_t", i_t + "");
-                timer = new Timer();
-                task = new TimerTask() {
-                    @Override
-                    public void run() {
-                        // TODO Auto-generated method stub
-                        Message message = new Message();
-                        message.what = 1;
-                        handler.sendMessage(message);
-                    }
-                };
-                timer.schedule(task, (long) (i_t * 60 * 1000), (long) (i_t * 60 * 1000));
+                pi =  PendingIntent.getBroadcast(this, 0, intent1, 0);
+                Log.d(Tag,"Get alarmmanager finish");
+                Log.d(Tag, System.currentTimeMillis()+"");
+                am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis()+(long) (i_t * 60 * 1000),(long) (i_t * 60 * 1000), pi);
+                Log.d(Tag, "alarmmanager repeat begin");
                 break;
             case 2: //timer once
                 Toast.makeText(this,"Timer begin",Toast.LENGTH_LONG).show();
                 double t_t =Double.parseDouble(totaltime);
                 Log.d("t_t", t_t + "");
-                timer_allTime = new Timer();
-                timer_allTime_helper = new Timer();
-                task_alltime = new TimerTask() {
-                    @Override
-                    public void run() {
-                        Message message = new Message();
-                        message.what = 1;
-                        handler_alltime.sendMessage(message);
-                    }
-                };
-                task_alltime_helper = new TimerTask() {
-                    @Override
-                    public void run() {
-                        Message message = new Message();
-                        message.what = 1;
-                        handler_alltime_helper.sendMessage(message);
-                    }
-                };
-                timer_allTime.schedule(task_alltime, (long) (t_t * 60 * 1000 / 2));
+                Log.d(Tag + "  recevice type", "type = " + type + "");
+                pi_all = PendingIntent.getBroadcast(this,0,intent_all,0);
+                pi_half =  PendingIntent.getBroadcast(this,0,intent_half,0);
+                am_half.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+(long) (t_t * 60 * 1000 / 2),pi_half);
+                am_all.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+(long) (t_t * 60 * 1000 ),pi_all);
                 break;
             case 3:  //both
                 Toast.makeText(this,"Timer begin",Toast.LENGTH_LONG).show();
@@ -166,40 +152,26 @@ public class TimingService extends Service {
                 Log.d("alli_t", alli_t + "");
                 double allt_t =Double.parseDouble(totaltime);
                 Log.d("allt_t", allt_t + "");
-                timer = new Timer();
-                task = new TimerTask() {
-                    @Override
-                    public void run() {
-                        // TODO Auto-generated method stub
-                        Message message = new Message();
-                        message.what = 1;
-                        handler.sendMessage(message);
-                    }
-                };
-                timer_allTime = new Timer();
-                timer_allTime_helper = new Timer();
-                task_alltime = new TimerTask() {
-                    @Override
-                    public void run() {
-                        Message message = new Message();
-                        message.what = 1;
-                        handler_alltime.sendMessage(message);
-                    }
-                };
-                task_alltime_helper = new TimerTask() {
-                    @Override
-                    public void run() {
-                        Message message = new Message();
-                        message.what = 1;
-                        handler_alltime_helper.sendMessage(message);
-                    }
-                };
-                timer_allTime.schedule(task_alltime, (long) (allt_t * 60 * 1000 / 2));
-                timer.schedule(task, (long) (alli_t * 60 * 1000), (long) (alli_t * 60 * 1000));
+
+                pi =  PendingIntent.getBroadcast(this, 0, intent1, 0);
+                pi_all = PendingIntent.getBroadcast(this,0,intent_all,0);
+                pi_half =  PendingIntent.getBroadcast(this,0,intent_half,0);
+
+                am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis()+(long) (alli_t * 60 * 1000),(long) (alli_t * 60 * 1000), pi);
+                am_half.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+(long) (allt_t * 60 * 1000 / 2),pi_half);
+                am_all.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+(long) (allt_t * 60 * 1000 ),pi_all);
+
                 break;
             default:
 
         }
         return START_STICKY;
+    }
+    public void registerBoradcastReceiver() {
+        IntentFilter myIntentFilter = new IntentFilter();
+        myIntentFilter.addAction("LOOPER_TIME");
+        myIntentFilter.addAction("ALL_TIME");
+        myIntentFilter.addAction("HALF_TIME");
+        registerReceiver(TimerReceiver, myIntentFilter);
     }
 }
